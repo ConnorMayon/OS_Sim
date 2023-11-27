@@ -229,11 +229,6 @@ bool processCmdLine( int numArgs, char **strVector, CmdLineData *clDataPtr )
     return atLeastOneSwitchFlag && correctConfigFileFlag;
    }
 
-void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
-   {
-    printf( "runSim called here\n" );
-   }
-
 /*
 Name: showCommandLineFormat
 Process: displays command line format as assistance to user

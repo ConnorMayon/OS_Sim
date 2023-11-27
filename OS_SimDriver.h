@@ -3,8 +3,11 @@
 #define OS_SIM_DRIVER_H
 
 // header files
+#include <pthread.h>
 #include "configops.h"
 #include "metadataops.h"
+#include "simulator.h"
+#include "simtimer.h"
 
 // Program constants
 typedef enum { MIN_NUM_ARGS = 3, LAST_FOUR_LETTERS = 4 } PRGRK_CONSTANTS;
@@ -24,7 +27,6 @@ typedef struct CmdLineDataStruct
 
 void clearCmdLineStruct( CmdLineData *clDataPtr );
 bool processCmdLine( int numArgs, char **strVector, CmdLineData *clDataPtr );
-void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr );
 void showCommandLineFormat();
 
 #endif // OS_SIM_DRIVER_H
