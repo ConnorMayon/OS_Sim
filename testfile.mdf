@@ -1,0 +1,25 @@
+Start Program Meta-Data Code:
+sys start
+app start, 0
+dev in, sound signal, 45
+cpu process, 9
+app end
+app start, 0
+dev in, usb, 18
+cpu process, 10
+app end
+app start, 0
+dev in, keyboard, 90
+dev out, monitor, 70
+app end
+app start, 0
+dev in, serial, 28
+dev in, keyboard, 70
+app end
+app start, 0
+dev in, video signal, 63
+dev out, usb, 16
+app end
+sys end
+End Program Meta-Data Code.
+
