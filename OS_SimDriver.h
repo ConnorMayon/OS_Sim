@@ -1,3 +1,7 @@
+/*
+ * Author: Connor Mayon
+ */
+
 // Preprocessor directive
 #ifndef OS_SIM_DRIVER_H
 #define OS_SIM_DRIVER_H
