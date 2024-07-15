@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leverington
+ */
+
 #include "StringUtils.h"
 
 int compareString( const char *oneStr, const char *otherStr )
