@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leverington
+ */
+
 #include "configops.h"
 
 /*
