@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leveringon
+*/
+
 // Preprocessor directive
 #ifndef STRING_UTILS_H
 #define STRING_UTILS_H

@@ -36,7 +36,6 @@ extern const char RADIX_POINT;
 // Function Prototyp  /////////////////////////////////////////////////////////
 
 void runTimer( int milliSeconds );
-void *runTimerThread( void *milliSeconds );
 double accessTimer( int controlCode, char *timeStr );
 double processTime( double startSec, double endSec, 
                            double startUSec, double endUSec, char *timeStr );

@@ -1,7 +1,6 @@
 /*
- * Original Author: Michael Leverington
- * Modified by Connor Mayon
- */
+ * Author: Connor Mayon
+*/
 
 #include "simulator.h"
 
@@ -11,11 +10,12 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
     // Initialize variables
     const char WRITE_ONLY_CHAR[] = "w";
 
-    int runTime;
+    int runTime, numProcesses;
     int *runTimePtr;
     int intArgs[2];
     pthread_t threadNum;
-    bool logToMonitor = true, logToFile = true;
+    bool ioInUse = false;
+    bool logToMonitor = true, logToFile = true, interupt = false, schedulePreemtive = false;
     char *timeStr;
     ProcessControlBoard *PCBHead;
     ProcessControlBoard *tempPCB;
@@ -27,11 +27,21 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
     createPCBLinkedList(metaDataPtr, PCBHead);
 
     tempPCB = PCBHead;
+    numProcesses = 0;
     while( tempPCB != NULL )
     {
      calcRemProcTime (tempPCB, configDataPtr->procCycleRate, configDataPtr->ioCycleRate);
+     numProcesses++;
+     tempPCB->usingIO = false;
      tempPCB = tempPCB->nextPCB;
     }
+
+    if (configDataPtr->cpuSchedCode == CPU_SCHED_FCFS_P_CODE ||
+        configDataPtr->cpuSchedCode == CPU_SCHED_SRTF_P_CODE ||
+        configDataPtr->cpuSchedCode == CPU_SCHED_RR_P_CODE)
+       {
+        schedulePreemtive = true;
+       }
 
     setProcessPriorities( PCBHead, configDataPtr->cpuSchedCode );
     
@@ -81,17 +91,15 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
         accessTimer(LAP_TIMER, timeStr);
         tempPCB->processState = READY_STATE;
         
+        intArgs[0] = NEW_STATE;
+        intArgs[1] = READY_STATE;
         if( logToMonitor )
            {
-            intArgs[0] = NEW_STATE;
-            intArgs[1] = READY_STATE;
             printToMonitor( STATE_CHANGE, timeStr, tempPCB->pid,
                 intArgs, NULL_CHAR );
            }
         if( logToFile )
            {
-            intArgs[0] = NEW_STATE;
-            intArgs[1] = READY_STATE;
             currLogLine = printToLogFile( currLogLine, STATE_CHANGE, timeStr,
                              tempPCB->pid, intArgs, NULL_CHAR );
            }
@@ -113,66 +121,33 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
         if( tempPCB->schedPriority == 0 )
            {
             OpCodeType* currentInstruction = tempPCB->programCounter;
+            tempPCB->remInstructCycles = currentInstruction->intArg2;
             bool isSegFault = false;
             accessTimer( LAP_TIMER, timeStr );
             tempPCB->processState = RUNNING_STATE;
             
+            intArgs[0] = tempPCB->processtimeRemaining;
             if( logToMonitor )
                {
-                intArgs[0] = tempPCB->processtimeRemaining;
                 printToMonitor( PROCESS_SELECTED, timeStr, tempPCB->pid,
                                     intArgs, NULL_CHAR );
                }
             if( logToFile )
                {
-                intArgs[0] = tempPCB->processtimeRemaining;
                 currLogLine = printToLogFile( currLogLine, PROCESS_SELECTED,
                                   timeStr, tempPCB->pid, intArgs, NULL_CHAR );
                }
 
             // Iterate through meta data until end of process
             while((compareString(currentInstruction->command, "app") != STR_EQ)
-               && (compareString(currentInstruction->strArg1, "end") != STR_EQ))
+               && (compareString(currentInstruction->strArg1, "end") != STR_EQ)
+               && !interupt )
                {
-                // if cpu process, wait
-                if( compareString( currentInstruction->command, "cpu" ) == STR_EQ )
-                   {
-                    accessTimer( LAP_TIMER, timeStr );
-                    if( logToMonitor )
-                       {
-                        printToMonitor( CPU_START, timeStr, tempPCB->pid,
-                                            intArgs, NULL_CHAR );
-                       }
-                    if( logToFile )
-                       {
-                        currLogLine = printToLogFile( currLogLine, CPU_START, 
-                                  timeStr, tempPCB->pid, intArgs, NULL_CHAR );
-                       }
-
-                    // Simulate cpu process running
-                    runTime = currentInstruction->intArg2
-                                * configDataPtr->procCycleRate;
-                    runTimer( runTime );
-
-                    tempPCB->processtimeRemaining -= runTime;
-
-                    accessTimer( LAP_TIMER, timeStr );
-                    if( logToMonitor )
-                       {
-                        printToMonitor( CPU_END, timeStr, tempPCB->pid,
-                                           intArgs, NULL_CHAR );
-                       }
-                    if( logToFile )
-                       {
-                        currLogLine = printToLogFile( currLogLine, CPU_END, 
-                               timeStr, tempPCB->pid, intArgs, NULL_CHAR );
-                       }
-                   }
-
                 // if io
-                else if( compareString( currentInstruction->command, "dev" )
-                                                                == STR_EQ )
+                if( compareString( currentInstruction->command, "dev" )
+                                                                == STR_EQ && !ioInUse )
                    {
+                    tempPCB->remInstructCycles = 0;
                     int ioType[2];
 
                     // check for input or output
@@ -203,32 +178,53 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
 
                     runTime = currentInstruction->intArg2
                         * configDataPtr->ioCycleRate;
-                    runTimePtr = &runTime;
-
                     // Simulate io running
-                    pthread_create( &threadNum, NULL, runTimerThread,
-                        (void*)runTimePtr );
-                    pthread_join( threadNum, NULL );
-
-                    tempPCB->processtimeRemaining -= runTime;
-
-                    accessTimer( LAP_TIMER, timeStr );
-                    if( logToMonitor )
+                    if( schedulePreemtive )
                        {
-                        printToMonitor( ioType[1], timeStr, tempPCB->pid,
-                                      intArgs, currentInstruction->strArg1 );
+                        tempPCB->usingIO = true;
+                        ioInUse = true;
+                        ThreadArgs *ta = (ThreadArgs *)malloc(sizeof(ThreadArgs));
+                        ta->isFCFSP = configDataPtr->cpuSchedCode == CPU_SCHED_FCFS_P_CODE;
+                        ta->milliSeconds = runTime;
+                        ta->numProcesses = numProcesses;
+                        ta->PCB = tempPCB;
+                        ta->timeStr = timeStr;
+                        ta->ioType = ioType;
+                        ta->currLine = currLogLine;
+                        ta->ioInUse = &ioInUse;
+                        ta->interupt = &interupt;
+
+                        pthread_create(&threadNum, NULL, runTimerPreemptive,
+                            (void*)ta);
                        }
-                    if( logToFile )
+                    else
                        {
-                        currLogLine = printToLogFile( currLogLine, ioType[1], 
-                                            timeStr, tempPCB->pid, intArgs, 
-                                              currentInstruction->strArg1 );
+                        runTimePtr = &runTime;
+                        pthread_create(&threadNum, NULL, runTimerThread,
+                            (void*)runTimePtr);
+
+                        pthread_join(threadNum, NULL);
+                        tempPCB->processtimeRemaining -= runTime;
+
+                        accessTimer( LAP_TIMER, timeStr );
+                        if( logToMonitor )
+                           {
+                            printToMonitor(ioType[1], timeStr, tempPCB->pid,
+                                intArgs, currentInstruction->strArg1);
+                           }
+                        if( logToFile )
+                           {
+                            currLogLine = printToLogFile(currLogLine, ioType[1],
+                                timeStr, tempPCB->pid, intArgs,
+                                currentInstruction->strArg1);
+                           }
                        }
                    }
 
                 else if( compareString( currentInstruction->command, "mem" ) 
                                                             == STR_EQ )
                    {
+                    tempPCB->remInstructCycles = 0;
                     // Handle mem allocation
                     if (compareString(currentInstruction->strArg1, "allocate") 
                                                                  == STR_EQ)
@@ -319,17 +315,15 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
                     else
                        {
                         accessTimer( LAP_TIMER, timeStr );
+                        intArgs[0] = currentInstruction->intArg2;
+                        intArgs[1] = currentInstruction->intArg3;
                         if( logToMonitor )
                            {
-                            intArgs[0] = currentInstruction->intArg2;
-                            intArgs[1] = currentInstruction->intArg3;
                             printToMonitor( MEM_ACCESS, timeStr, tempPCB->pid,
                                                  intArgs, NULL_CHAR );
                            }
                         if( logToFile )
                            {
-                            intArgs[0] = currentInstruction->intArg2;
-                            intArgs[1] = currentInstruction->intArg3;
                             currLogLine = printToLogFile( currLogLine, 
                                                   MEM_ACCESS, timeStr,
                                            tempPCB->pid, intArgs, NULL_CHAR );
@@ -347,13 +341,12 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
                                 printMemStatus( memAllocHead );
                                }
                             if( logToFile )
-                            {
+                               {
                                 currLogLine = printToLogFile( currLogLine, 
                                                  MEM_ACCESS_SUCC, timeStr,
                                                  tempPCB->pid, intArgs,
                                                            NULL_CHAR );
-                            }
-                            
+                               }
                            }
                         else
                            {
@@ -375,12 +368,56 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
                        }
                    }
 
-                   if( !isSegFault )
-                      {
-                       currentInstruction = currentInstruction->nextNode;
-                       tempPCB->programCounter = currentInstruction;
-                      }
-                
+                // if cpu process, wait
+                else if( compareString(currentInstruction->command, "cpu") == STR_EQ )
+                   {
+                    int quantumCyclesRem = configDataPtr->quantumCycles;
+                    accessTimer(LAP_TIMER, timeStr);
+                    if( logToMonitor )
+                       {
+                        printToMonitor(CPU_START, timeStr, tempPCB->pid,
+                            intArgs, NULL_CHAR);
+                       }
+                    if( logToFile )
+                       {
+                        currLogLine = printToLogFile(currLogLine, CPU_START,
+                            timeStr, tempPCB->pid, intArgs, NULL_CHAR);
+                       }
+
+                    while( quantumCyclesRem > 0 && tempPCB->remInstructCycles > 0 
+                                                                && !interupt )
+                       {
+                        // Simulate cpu process running
+                        runTime = configDataPtr->procCycleRate;
+                        runTimer(runTime);
+
+                        tempPCB->processtimeRemaining -= runTime;
+                        if( schedulePreemtive )
+                           {
+                            quantumCyclesRem--;
+                           }
+                        tempPCB->remInstructCycles--;
+                       }
+
+                    accessTimer(LAP_TIMER, timeStr);
+                    if( logToMonitor && tempPCB->remInstructCycles == 0 )
+                       {
+                        printToMonitor(CPU_END, timeStr, tempPCB->pid,
+                            intArgs, NULL_CHAR);
+                       }
+                    if( logToFile && tempPCB->remInstructCycles == 0 )
+                       {
+                        currLogLine = printToLogFile(currLogLine, CPU_END,
+                            timeStr, tempPCB->pid, intArgs, NULL_CHAR);
+                       }
+                   }
+
+                if( !isSegFault && tempPCB->remInstructCycles == 0 && !tempPCB->usingIO )
+                   {
+                    currentInstruction = currentInstruction->nextNode;
+                    tempPCB->remInstructCycles = currentInstruction->intArg2;
+                    tempPCB->programCounter = currentInstruction->nextNode;
+                   }
                }
 
             accessTimer( LAP_TIMER, timeStr );
@@ -415,7 +452,7 @@ void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr )
                                 intArgs, NULL_CHAR );
                }
 
-            updateProcessPriorities( PCBHead );
+            updateProcessPriorities( PCBHead, configDataPtr->cpuSchedCode );
            }
 
         // Loop back to first PCB
@@ -665,7 +702,6 @@ memAllocation *freeAllocationsByPid( memAllocation *memAllocHead, int pid )
        }
 
     // Free memory at the head if right pid
-    // TODO: Find double free bug in this while loop
     while( newMemAllocHead->pid == pid )
        {
         if( newMemAllocHead->nextAllocation == NULL )
@@ -976,6 +1012,47 @@ void printToMonitor( int messageCode, char* timeStr, int pid,
        }
    }
 
+void *runTimerThread( void* milliSeconds )
+   {
+    int mSecs = *((int*)milliSeconds);
+    runTimer(mSecs);
+    return NULL;
+   }
+
+void *runTimerPreemptive( void* args )
+   {
+    ThreadArgs *ta = (ThreadArgs *)args;
+    int intArg = 0;
+    int *intArgs = &intArg;
+    runTimer(ta->milliSeconds);
+    if( ta->isFCFSP )
+       {
+        ta->PCB->schedPriority = ta->numProcesses - 1;
+       }
+    ta->PCB->processtimeRemaining -= ta->milliSeconds;
+
+    accessTimer( LAP_TIMER, ta->timeStr );
+    if( ta->logToMonitor )
+       {
+        printf("logging to monitor\n");
+        printToMonitor( ta->ioType[1], ta->timeStr, ta->PCB->pid,
+            intArgs, ta->PCB->programCounter->strArg1 );
+       }
+    if( ta->logToFile )
+       {
+        ta->currLine = printToLogFile( ta->currLine, ta->ioType[1],
+            ta->timeStr, ta->PCB->pid, intArgs,
+            ta->PCB->programCounter->strArg1 );
+       }
+
+    printf("interupting\n");
+    *ta->interupt = true;
+    ta->PCB->usingIO = false;
+    *ta->ioInUse = false;
+    printf("Thread done\n");
+
+    return NULL;
+   }
 
 // Iterates through PCB linked list assigning priotities
 void setProcessPriorities( ProcessControlBoard *PCBHead, int scheduleType )
@@ -986,6 +1063,8 @@ void setProcessPriorities( ProcessControlBoard *PCBHead, int scheduleType )
     switch( scheduleType )
        {
         case CPU_SCHED_FCFS_N_CODE:
+        case CPU_SCHED_FCFS_P_CODE:
+        case CPU_SCHED_RR_P_CODE:
             index = 0;
             while( tempPCB != NULL )
                {
@@ -996,6 +1075,7 @@ void setProcessPriorities( ProcessControlBoard *PCBHead, int scheduleType )
             break;
 
         case CPU_SCHED_SJF_N_CODE:
+        case CPU_SCHED_SRTF_P_CODE:
             numPCBs = 0;
             // Initialize all PCB scheduling priorities to -1 (unassigned)
             while( tempPCB != NULL )
@@ -1048,14 +1128,53 @@ void setProcessPriorities( ProcessControlBoard *PCBHead, int scheduleType )
 
 
 // Decrements the priority of each process
-void updateProcessPriorities( ProcessControlBoard *PCBHead )
+void updateProcessPriorities( ProcessControlBoard *PCBHead, int schedType )
    {
     ProcessControlBoard *tempPCB = PCBHead;
-    while( tempPCB != NULL )
-    {
-     tempPCB->schedPriority--;
-     tempPCB = tempPCB->nextPCB;
-    }
+    if( schedType == CPU_SCHED_RR_P_CODE ) 
+       {
+        ProcessControlBoard* highPriorPCB;
+        ProcessControlBoard* startPCB = tempPCB;
+        int numProcesses = 0;
+        
+        while( tempPCB != NULL )
+           {
+            if( tempPCB->schedPriority == 0 )
+               {
+                highPriorPCB = tempPCB;
+               }
+            
+            tempPCB = tempPCB->nextPCB;
+            numProcesses++;
+           }
+
+        tempPCB = startPCB;
+        while( tempPCB != NULL )
+           {
+            if( tempPCB == highPriorPCB )
+               {
+                tempPCB->schedPriority = numProcesses - 1;
+               }
+            else
+               {
+                tempPCB->schedPriority--;
+               }
+            tempPCB = tempPCB->nextPCB;
+           }
+       }
+    else if(schedType == CPU_SCHED_SRTF_P_CODE)
+       {
+        setProcessPriorities(PCBHead, schedType);
+       }
+    // FCFS-P gets sheduled when an interupt occurs, otherwise acts like non-preemtive
+    else 
+       {
+        while( tempPCB != NULL )
+           {
+            tempPCB->schedPriority--;
+            tempPCB = tempPCB->nextPCB;
+           }
+       }
    }
 
 

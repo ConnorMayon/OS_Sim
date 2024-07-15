@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leveringon
+*/
+
 // Preprocessor directive
 #ifndef CONFIGOPS_H
 #define CONFIGOPS_H

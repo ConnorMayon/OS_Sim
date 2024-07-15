@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leveringon
+*/
+
 // Preprocessor directive
 #ifndef METADATAOPS_H
 #define METADATAOPS_H

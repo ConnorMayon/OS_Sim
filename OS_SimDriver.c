@@ -1,6 +1,6 @@
 /*
- * Author: Connor Mayon
- */
+ * Author: Michael Leveringon
+*/
 
 // header files
 #include <stdio.h>

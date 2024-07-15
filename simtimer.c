@@ -63,13 +63,6 @@ void runTimer( int milliSeconds )
        }
    }
 
-void *runTimerThread( void *milliSeconds )
-   {
-    int mSecs = *((int *) milliSeconds);
-    runTimer( mSecs );
-    return NULL;
-   }
-
 double accessTimer( int controlCode, char *timeStr )
    {
     static bool running = false;

@@ -1,6 +1,6 @@
 /*
- * Author: Michael Leverington
- */
+ * Author: Michael Leveringon
+*/
 
 #include "configops.h"
 

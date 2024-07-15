@@ -1,3 +1,7 @@
+/*
+ * Author: Michael Leveringon
+*/
+
 #ifndef STANDARD_CONSTANTS_H
 #define STANDARD_CONSTANTS_H
 

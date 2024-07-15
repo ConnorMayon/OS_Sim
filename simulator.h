@@ -58,10 +58,27 @@ typedef struct ProcessControlBoard
     int schedPriority;
     int timeUsed;
     int processtimeRemaining;
+    int remInstructCycles;
+    bool usingIO;
     OpCodeType *programCounter;
     memAllocation processAllocations;
     struct ProcessControlBoard *nextPCB;
    } ProcessControlBoard;
+
+typedef struct ThreadArgs
+{
+    int milliSeconds;
+    int numProcesses;
+    bool isFCFSP;
+    bool logToMonitor;
+    bool logToFile;
+    bool *ioInUse;
+    bool *interupt;
+    int *ioType;
+    char *timeStr;
+    LogFileLine *currLine;
+    ProcessControlBoard *PCB;
+} ThreadArgs;
 
 
 bool accessMem( memAllocation *memAllocHead, int base, int limit, int pid );
@@ -83,8 +100,11 @@ LogFileLine *printToLogFile( LogFileLine* currLogLine, int messageCode, char* ti
 void printToMonitor( int messageCode, char *timeStr, int pid, 
                        int intArgs[], char* ioDev);
 void runSim( ConfigDataType *configDataPtr, OpCodeType *metaDataPtr );
+
+void *runTimerThread( void *milliSeconds );
+void *runTimerPreemptive( void *args );
 void setProcessPriorities( ProcessControlBoard *PCBHead, int scheduleType );
-void updateProcessPriorities( ProcessControlBoard *PCBHead );
+void updateProcessPriorities( ProcessControlBoard *PCBHead, int schedType );
 LogFileLine *writeLogFileHeader( LogFileLine *logFileHead,
                                           ConfigDataType* configDataPtr );
 void writeToLogFile( LogFileLine* logHeadPtr, FILE* logFileOut );
