@@ -1,3 +1,7 @@
+/*
+ * Author: Connor Mayon
+ */
+
 // header files
 #include <stdio.h>
 #include <stdbool.h>
