@@ -1,3 +1,8 @@
+/*
+ * Original Author: Michael Leverington
+ * Modified by Connor Mayon
+ */
+
 #include "simulator.h"
 
 // Main function to run simulator
